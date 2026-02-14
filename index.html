@@ -24,7 +24,7 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* --- BACKGROUND FLOATERS (GLOBAL) --- */
+        /* --- BACKGROUND FLOATERS --- */
         .bg-floaters {
             position: fixed; width: 100%; height: 100%; top: 0; left: 0;
             pointer-events: none; z-index: 0; overflow: hidden;
@@ -88,11 +88,36 @@
         .tap-msg { margin-top: 20px; color: #999; font-size: 0.9rem; animation: blink 1s infinite; }
         @keyframes blink { 50% { opacity: 0.5; } }
 
-        /* --- PAGE 3: SCRATCH --- */
+        /* --- PAGE 3: SCRATCH (RESIZED) --- */
+        .scratch-wrapper {
+            position: relative;
+            width: 90%;
+            max-width: 350px;
+            background: white;
+            padding: 10px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
         .scratch-box {
-            position: relative; width: 300px; height: 300px;
-            border: 8px solid white; border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15); overflow: hidden;
+            position: relative;
+            width: 100%;
+            border-radius: 10px;
+            overflow: hidden;
+            line-height: 0;
+        }
+        #targetImg {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        #scratchCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            touch-action: none;
         }
 
         /* --- PAGE 4: LIVING ROOM --- */
@@ -194,7 +219,7 @@
 
     <div id="page1" class="page active">
         <div class="chase-area">
-            <h2 style="text-align:center; margin-top:100px; color:var(--accent);">จดหมายรักฉบับนี้<br>ต้องใช้ความพยายามนะ! 😝</h2>
+            <h2 style="text-align:center; margin-top:100px; color:var(--accent);">ขยันจิ้มซองหน่อยน้า! 😝</h2>
             <div class="flying-envelope" id="envelope" onmouseover="moveEnv()" ontouchstart="moveEnvMobile(event)">
                 <div class="wing left"></div><div class="env-body">💌</div><div class="wing right"></div>
             </div>
@@ -222,9 +247,11 @@
 
     <div id="page3" class="page">
         <h2 style="margin-bottom:20px;">มีความลับซ่อนอยู่...</h2>
-        <div class="scratch-box">
-            <img src="photo1.jpg" style="width:100%; height:100%; object-fit:cover;">
-            <canvas id="scratchCanvas" width="300" height="300" style="position:absolute; top:0; left:0; cursor:pointer;"></canvas>
+        <div class="scratch-wrapper">
+            <div class="scratch-box" id="scratchBox">
+                <img src="photo1.jpg" id="targetImg">
+                <canvas id="scratchCanvas"></canvas>
+            </div>
         </div>
         <p style="margin-top:15px; color:#888;">ขูดให้สะอาดเลยนะ</p>
     </div>
@@ -271,8 +298,8 @@
     </div>
 
     <script>
-        // --- CONFIG (แก้ไขวันที่ 13/07/2025 และข้อความตามลำดับ) ---
-        const startDate = new Date(2025, 6, 13); // เดือนใน JS เริ่มที่ 0 (6 = กรกฎาคม)
+        // --- CONFIG ---
+        const startDate = new Date(2025, 6, 13);
         const photos = [
             { src: "photo1.jpg", caption: "พี่ตั้งดีใจที่มีมะเหมี่ยวอยู่ข้าง ๆ" },
             { src: "photo2.jpg", caption: "รูปแรกที่ถ่ายด้วยกัน" },
@@ -356,21 +383,61 @@
             if(percent >= 100) setTimeout(() => goTo('page3'), 800);
         }
 
-        // --- PAGE 3: SCRATCH ---
+        // --- PAGE 3: SCRATCH (DYNAMIC RESIZE) ---
         function startScratch() {
-            const c = document.getElementById('scratchCanvas'); const ctx = c.getContext('2d');
-            ctx.fillStyle = '#C0C0C0'; ctx.fillRect(0,0,300,300);
+            const c = document.getElementById('scratchCanvas'); 
+            const ctx = c.getContext('2d');
+            const img = document.getElementById('targetImg');
+            
+            // รอให้รูปโหลดเพื่อหาขนาดที่แท้จริง
+            const setupCanvas = () => {
+                c.width = img.clientWidth;
+                c.height = img.clientHeight;
+                ctx.fillStyle = '#C0C0C0'; 
+                ctx.fillRect(0,0,c.width,c.height);
+                // เพิ่มลายเล็กๆ ให้ดูเหมือนบัตรขูด
+                ctx.fillStyle = '#aaa';
+                for(let i=0; i<100; i++) ctx.fillRect(Math.random()*c.width, Math.random()*c.height, 2, 2);
+            };
+
+            if(img.complete) setupCanvas(); else img.onload = setupCanvas;
+
             let isDrawing = false;
             function scratch(x,y) {
-                ctx.globalCompositeOperation = 'destination-out'; ctx.beginPath(); ctx.arc(x,y,25,0,Math.PI*2); ctx.fill();
-                const d = ctx.getImageData(0,0,300,300).data; let t = 0;
-                for(let i=3; i<d.length; i+=4) if(d[i]===0) t++;
-                if(t/(300*300) > 0.6) { c.style.display = 'none'; setTimeout(() => goTo('page4'), 1000); }
+                ctx.globalCompositeOperation = 'destination-out'; 
+                ctx.beginPath(); 
+                ctx.arc(x,y,25,0,Math.PI*2); 
+                ctx.fill();
+                
+                // ตรวจสอบพื้นที่ที่ถูกขูดออก
+                const imageData = ctx.getImageData(0,0,c.width,c.height).data;
+                let transparentPixels = 0;
+                for(let i=3; i<imageData.length; i+=4) if(imageData[i]===0) transparentPixels++;
+                
+                if(transparentPixels / (c.width * c.height) > 0.6) { 
+                    c.style.transition = 'opacity 1s';
+                    c.style.opacity = '0';
+                    setTimeout(() => goTo('page4'), 1200); 
+                }
             }
-            const down = () => isDrawing=true; const up = () => isDrawing=false;
-            const move = (e) => { if(!isDrawing) return; const r = c.getBoundingClientRect(); scratch((e.touches?e.touches[0].clientX:e.clientX)-r.left, (e.touches?e.touches[0].clientY:e.clientY)-r.top); }
-            c.addEventListener('mousedown', down); c.addEventListener('mouseup', up); c.addEventListener('mousemove', move);
-            c.addEventListener('touchstart', (e)=>{down();e.preventDefault()}); c.addEventListener('touchend', up); c.addEventListener('touchmove', move);
+
+            const getPos = (e) => {
+                const r = c.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return { x: clientX - r.left, y: clientY - r.top };
+            };
+
+            const down = (e) => { isDrawing=true; const p = getPos(e); scratch(p.x, p.y); };
+            const up = () => isDrawing=false;
+            const move = (e) => { if(!isDrawing) return; e.preventDefault(); const p = getPos(e); scratch(p.x, p.y); };
+
+            c.addEventListener('mousedown', down);
+            window.addEventListener('mouseup', up);
+            c.addEventListener('mousemove', move);
+            c.addEventListener('touchstart', down);
+            c.addEventListener('touchend', up);
+            c.addEventListener('touchmove', move);
         }
 
         // --- PAGE 4: GALLERY ---
